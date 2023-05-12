@@ -17,15 +17,14 @@ require('dotenv').config();
 const port = process.env.PORT || 3000;
 const secretKey = process.env.SECRET_KEY || 'xco0sr0fh4e52x03g9mv';
 const weatherHost = process.env.WEATHER_HOST || 'localhost';
-const weatherPort = process.env.WEATHER_PORT || 8000;
+const weatherPort = process.env.WEATHER_PORT || 5000;
 const authHost = process.env.AUTH_HOST || 'localhost';
-const authPort = process.env.AUTH_PORT || 9000;
+const authPort = process.env.AUTH_PORT || 8080;
 
 // Logging setup
 const logger = winston.createLogger({
   transports: [
     new winston.transports.Console(),
-    new winston.transports.File({ filename: 'app.log' }),
   ],
 });
 
