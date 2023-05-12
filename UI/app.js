@@ -159,17 +159,19 @@ app.get('/logout', (req, res) => {
 });
 
 // Weather endpoint
-app.get('/weather/:city', async (req, res, next) => {
+app.get('/weather/:city', async (req, res) => {
     try {
-        const response = await axios.get(
-            `http://${weatherHost}:${weatherPort}/${req.params.city}`
-        );
-        res.json(response.data);
+      const city = req.params.city;
+      const response = await axios.get(`http://${process.env.WEATHER_HOST}:${process.env.WEATHER_PORT}/${city}`);
+      const weatherData = response.data;
+      res.setHeader('Content-Type', 'application/json'); // Set Content-Type header
+      res.send(weatherData); // Send the weather data as the response
     } catch (error) {
-        logger.error(error);
-        res.status(500).send('Internal Server Error');
+      console.error(error);
+      res.status(500).send('Internal Server Error');
     }
-});
+  });
+  
 
 // Error handling middleware
 app.use((err, req, res, next) => {

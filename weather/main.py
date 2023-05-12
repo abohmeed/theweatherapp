@@ -2,9 +2,6 @@ from flask import Flask, jsonify, make_response
 from flask_cors import CORS
 import requests
 import os
-from dotenv import load_dotenv
-
-load_dotenv()  # Load environment variables from .env file if present
 
 app = Flask(__name__)
 CORS(app)
