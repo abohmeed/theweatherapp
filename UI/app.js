@@ -1,92 +1,175 @@
-const express = require('express')
-const app = express()
-const port = 3000
-const path = require('path')
-const axios = require('axios')
-const cookieParser = require("cookie-parser");
+const express = require('express');
+const app = express();
+const path = require('path');
+const axios = require('axios');
+const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
+const jwt = require('jsonwebtoken');
+const { check, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
+const winston = require('winston');
+const expressWinston = require('express-winston');
 
-app.use('/', express.static(path.join(__dirname, 'public/static')))
+// Load environment variables
+require('dotenv').config();
+
+// Configuration
+const port = process.env.PORT || 3000;
+const secretKey = process.env.SECRET_KEY || 'xco0sr0fh4e52x03g9mv';
+const weatherHost = process.env.WEATHER_HOST || 'localhost';
+const weatherPort = process.env.WEATHER_PORT || 8000;
+const authHost = process.env.AUTH_HOST || 'localhost';
+const authPort = process.env.AUTH_PORT || 9000;
+
+// Logging setup
+const logger = winston.createLogger({
+  transports: [
+    new winston.transports.Console(),
+    new winston.transports.File({ filename: 'app.log' }),
+  ],
+});
+
+app.use('/', express.static(path.join(__dirname, 'public/static')));
 app.set('view engine', 'ejs');
-app.use(bodyParser.urlencoded({extended: true}));
+app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-const jwt = require('jsonwebtoken');
+// Logging middleware
+app.use(
+  expressWinston.logger({
+    transports: [
+      new winston.transports.Console(),
+      new winston.transports.File({ filename: 'requests.log' }),
+    ],
+    format: winston.format.combine(
+      winston.format.timestamp(),
+      winston.format.json()
+    ),
+  })
+);
 
+// Authentication middleware
 function authenticateToken(req, res, next) {
-    if (!req.cookies.token) {
-        res.redirect("/login");
-        return
+  if (!req.cookies.token) {
+    res.redirect('/login');
+    return;
+  }
+  jwt.verify(req.cookies.token, secretKey, function (err, decoded) {
+    if (err) {
+      logger.error(err);
+      res.redirect('/login');
+      return;
     }
-    jwt.verify(req.cookies.token, "xco0sr0fh4e52x03g9mv", function (err, decoded) {
-        if (err) {
-            console.log(err)
-            res.redirect("/login")
-            return
-        }
-        next()
-    })
+    next();
+  });
 }
 
-app.get("/health", (req,res) => {
-    res.sendStatus(200)
-} )
+// Rate limiting middleware
+const limiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute
+});
+app.use(limiter);
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.sendStatus(200);
+});
+
+// Login endpoint
 app.get('/login', (req, res) => {
-    res.sendFile(path.join((__dirname + "/public//login.html")))
-})
-app.get('/signup', (req, res) => {
-    res.sendFile(path.join((__dirname + "/public//signup.html")))
-})
-app.post('/login', (loginreq, loginres) => {
-    axios
-        .post('http://' + process.env.AUTH_HOST + ':' + process.env.AUTH_PORT + '/users/' + loginreq.body.username, {
-            user_name: loginreq.body.username,
-            user_password: loginreq.body.password
-        })
-        .then((res) => {
-            loginres.writeHead(302, {
-                "Set-Cookie": "token=" + res.data.JWT + "; HttpOnly",
-                "Access-Control-Allow-Credentials": "true",
-                "Location": "/"
-            })
-                .send().end();
-        })
-        .catch((error) => {
-            loginres.redirect("/login?error=invalidcreds")
-            console.error(error)
-        })
-})
-app.post("/signup", (signupreq, signupres) => {
-    axios.post('http://' + process.env.AUTH_HOST + ':' + process.env.AUTH_PORT + '/users/', {
-        user_name: signupreq.body.username,
-        user_password: signupreq.body.password
-    }).then((res) => {
-        signupres.redirect("/login")
-    }).catch((error) => {
-        console.log(error)
-        signupres.redirect('/signup?error=userexists')
-    })
-})
+  res.sendFile(path.join(__dirname, '/public/login.html'));
+});
 
-app.get('/', authenticateToken, (req, res) => {
-    res.sendFile(path.join((__dirname + "/public//index.html")))
-})
-app.get("/logout",(req,res) => {
-    res.writeHead(302, {
-        "Set-Cookie": `token=; HttpOnly; path=/; max-age=0`,
-        "Location": "/login"
-    });
-    res.end();
-})
-app.get("/weather/:city",(req,res) => {
-    axios.get('http://' + process.env.WEATHER_HOST + ':' + process.env.WEATHER_PORT + '/' + req.params.city)
-        .then((response) => {
-            res.json(response.data)
-        }).catch((error) => {
-            console.log(error)
-        })
-})
+app.post(
+  '/login',
+  [
+    check('username').notEmpty().withMessage('Username is required'),
+    check('password').notEmpty().withMessage('Password is required'),
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const response = await axios.post(
+        `http://${authHost}:${authPort}/users/${req.body.username}`,
+        {
+          user_name: req.body.username,
+          user_password: req.body.password,
+        }
+      );
+      res.cookie('token', response.data.JWT, { httpOnly: true });
+      res.redirect('/');
+    } catch (error) {
+      logger.error(error);
+      res.redirect('/login?error=invalidcreds');
+    }
+  }
+);
+
+// Signup endpoint
+app.get('/signup', (req, res) => {
+  res.sendFile(path.join(__dirname, '/public/signup.html'));
+});
+
+app.post(
+  '/signup',
+  [
+    check('username').notEmpty().withMessage('Username is required'),
+  check('password').notEmpty().withMessage('Password is required'),
+],
+async (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const response = await axios.post(
+      `http://${authHost}:${authPort}/users/`,
+      {
+        user_name: req.body.username,
+        user_password: req.body.password,
+      }
+    );
+    res.redirect('/login');
+  } catch (error) {
+    logger.error(error);
+    res.redirect('/signup?error=userexists');
+  }
+}
+);
+
+// Logout endpoint
+app.get('/logout', (req, res) => {
+  res.clearCookie('token');
+  res.redirect('/login');
+});
+
+// Weather endpoint
+app.get('/weather/:city', async (req, res, next) => {
+  try {
+    const response = await axios.get(
+      `http://${weatherHost}:${weatherPort}/${req.params.city}`
+    );
+    res.json(response.data);
+  } catch (error) {
+    logger.error(error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  logger.error(err);
+  res.status(500).send('Internal Server Error');
+});
+
+// Start the server
 app.listen(port, () => {
-    console.log(`Weather app listening at http://localhost:${port}`)
-})
+  console.log(`Weather app listening at http://localhost:${port}`);
+});
+
