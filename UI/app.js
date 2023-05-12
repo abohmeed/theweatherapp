@@ -23,9 +23,9 @@ const authPort = process.env.AUTH_PORT || 8080;
 
 // Logging setup
 const logger = winston.createLogger({
-  transports: [
-    new winston.transports.Console(),
-  ],
+    transports: [
+        new winston.transports.Console(),
+    ],
 });
 
 app.use('/', express.static(path.join(__dirname, 'public/static')));
@@ -35,140 +35,150 @@ app.use(cookieParser());
 
 // Logging middleware
 app.use(
-  expressWinston.logger({
-    transports: [
-      new winston.transports.Console(),
-      new winston.transports.File({ filename: 'requests.log' }),
-    ],
-    format: winston.format.combine(
-      winston.format.timestamp(),
-      winston.format.json()
-    ),
-  })
+    expressWinston.logger({
+        transports: [
+            new winston.transports.Console(),
+            new winston.transports.File({ filename: 'requests.log' }),
+        ],
+        format: winston.format.combine(
+            winston.format.timestamp(),
+            winston.format.json()
+        ),
+    })
 );
 
 // Authentication middleware
 function authenticateToken(req, res, next) {
-  if (!req.cookies.token) {
-    res.redirect('/login');
-    return;
-  }
-  jwt.verify(req.cookies.token, secretKey, function (err, decoded) {
-    if (err) {
-      logger.error(err);
-      res.redirect('/login');
-      return;
+    const token = req.cookies.token;
+    if (!token) {
+      return res.redirect('/login');
     }
-    next();
-  });
-}
+  
+    jwt.verify(token, secretKey, function (err, decoded) {
+      if (err) {
+        logger.error(err);
+        return res.redirect('/login');
+      }
+  
+      // If the token is valid, attach the decoded payload to the request object
+      req.username = decoded;
+      next();
+    });
+  }
+  
 
 // Rate limiting middleware
 const limiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 100, // 100 requests per minute
+    windowMs: 60 * 1000, // 1 minute
+    max: 100, // 100 requests per minute
 });
 app.use(limiter);
 
+// Application root
+app.get('/', authenticateToken, (req, res) => {
+    res.sendFile(path.join(__dirname, '/public/index.html'));
+});
+
+
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.sendStatus(200);
+    res.sendStatus(200);
 });
 
 // Login endpoint
 app.get('/login', (req, res) => {
-  res.sendFile(path.join(__dirname, '/public/login.html'));
+    res.sendFile(path.join(__dirname, '/public/login.html'));
 });
 
 app.post(
-  '/login',
-  [
-    check('username').notEmpty().withMessage('Username is required'),
-    check('password').notEmpty().withMessage('Password is required'),
-  ],
-  async (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    try {
-      const response = await axios.post(
-        `http://${authHost}:${authPort}/users/${req.body.username}`,
-        {
-          user_name: req.body.username,
-          user_password: req.body.password,
+    '/login',
+    [
+        check('username').notEmpty().withMessage('Username is required'),
+        check('password').notEmpty().withMessage('Password is required'),
+    ],
+    async (req, res, next) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
         }
-      );
-      res.cookie('token', response.data.JWT, { httpOnly: true });
-      res.redirect('/');
-    } catch (error) {
-      logger.error(error);
-      res.redirect('/login?error=invalidcreds');
+
+        try {
+            const response = await axios.post(
+                `http://${authHost}:${authPort}/users/${req.body.username}`,
+                {
+                    user_name: req.body.username,
+                    user_password: req.body.password,
+                }
+            );
+            res.cookie('token', response.data.JWT, { httpOnly: true });
+            res.redirect('/');
+        } catch (error) {
+            logger.error(error);
+            res.redirect('/login?error=invalidcreds');
+        }
     }
-  }
 );
 
 // Signup endpoint
 app.get('/signup', (req, res) => {
-  res.sendFile(path.join(__dirname, '/public/signup.html'));
+    res.sendFile(path.join(__dirname, '/public/signup.html'));
 });
 
 app.post(
-  '/signup',
-  [
-    check('username').notEmpty().withMessage('Username is required'),
-  check('password').notEmpty().withMessage('Password is required'),
-],
-async (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
+    '/signup',
+    [
+        check('username').notEmpty().withMessage('Username is required'),
+        check('password').notEmpty().withMessage('Password is required'),
+    ],
+    async (req, res, next) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
 
-  try {
-    const response = await axios.post(
-      `http://${authHost}:${authPort}/users/`,
-      {
-        user_name: req.body.username,
-        user_password: req.body.password,
-      }
-    );
-    res.redirect('/login');
-  } catch (error) {
-    logger.error(error);
-    res.redirect('/signup?error=userexists');
-  }
-}
+        try {
+            const response = await axios.post(
+                `http://${authHost}:${authPort}/users/`,
+                {
+                    user_name: req.body.username,
+                    user_password: req.body.password,
+                }
+            );
+            res.redirect('/login');
+        } catch (error) {
+            logger.error(error);
+            res.redirect('/signup?error=userexists');
+        }
+    }
 );
 
 // Logout endpoint
 app.get('/logout', (req, res) => {
-  res.clearCookie('token');
-  res.redirect('/login');
+    res.clearCookie('token');
+    res.redirect('/login');
 });
 
 // Weather endpoint
 app.get('/weather/:city', async (req, res, next) => {
-  try {
-    const response = await axios.get(
-      `http://${weatherHost}:${weatherPort}/${req.params.city}`
-    );
-    res.json(response.data);
-  } catch (error) {
-    logger.error(error);
-    res.status(500).send('Internal Server Error');
-  }
+    try {
+        const response = await axios.get(
+            `http://${weatherHost}:${weatherPort}/${req.params.city}`
+        );
+        res.json(response.data);
+    } catch (error) {
+        logger.error(error);
+        res.status(500).send('Internal Server Error');
+    }
 });
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  logger.error(err);
-  res.status(500).send('Internal Server Error');
+    logger.error(err);
+    res.status(500).send('Internal Server Error');
 });
 
 // Start the server
 app.listen(port, () => {
-  console.log(`Weather app listening at http://localhost:${port}`);
+    console.log(`Weather app listening at http://localhost:${port}`);
 });
 

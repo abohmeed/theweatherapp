@@ -80,6 +80,7 @@ tolerations: []
 
 affinity: {}
 dbHost: "127.0.0.1"
+secretKey: xco0sr0fh4e52x03g9mv
 mysql:
   auth:
     username: authuser
