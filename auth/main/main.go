@@ -15,13 +15,15 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-const secretkey string = "xco0sr0fh4e52x03g9mv"
-
-var dbHost string
-var dbUser string
-var dbPassword string
-var dbName string
-var dbPort string
+const (
+	defaultDBHost     = "127.0.0.1"
+	defaultDBUser     = "authuser"
+	defaultDBPassword = "authpassword"
+	defaultDBName     = "weatherapp"
+	defaultDBPort     = "3306"
+	defaultSecretKey  = "xco0sr0fh4e52x03g9mv"
+	defaultAuthPort   = "8080"
+)
 
 type Token struct {
 	Role        string `json:"role"`
@@ -29,22 +31,17 @@ type Token struct {
 	TokenString string `json:"token"`
 }
 
+var (
+	dbHost     = getEnv("DB_HOST", defaultDBHost)
+	dbUser     = getEnv("DB_USER", defaultDBUser)
+	dbPassword = getEnv("DB_PASSWORD", defaultDBPassword)
+	dbName     = getEnv("DB_NAME", defaultDBName)
+	dbPort     = getEnv("DB_PORT", defaultDBPort)
+	secretKey  = getEnv("SECRET_KEY", defaultSecretKey)
+	authPort   = getEnv("AUTH_PORT", defaultAuthPort)
+)
+
 func main() {
-	if os.Getenv("DB_HOST") != "" {
-		dbHost = os.Getenv("DB_HOST")
-	}
-	if os.Getenv("DB_USER") != "" {
-		dbUser = os.Getenv("DB_USER")
-	}
-	if os.Getenv("DB_PASSWORD") != "" {
-		dbPassword = os.Getenv("DB_PASSWORD")
-	}
-	if os.Getenv("DB_NAME") != "" {
-		dbName = os.Getenv("DB_NAME")
-	}
-	if os.Getenv("DB_PORT") != "" {
-		dbPort = os.Getenv("DB_PORT")
-	}
 	db, err := authdb.Connect(dbUser, dbPassword, dbHost, dbPort)
 	if err != nil {
 		fmt.Println(err.Error())
@@ -60,7 +57,14 @@ func main() {
 	router.GET("/", health)
 	router.POST("/users/:id", loginUser)
 	router.POST("/users", createUser)
-	router.Run(":8080")
+	router.Run(":" + authPort)
+}
+func getEnv(key, defaultValue string) string {
+	value, exists := os.LookupEnv(key)
+	if !exists {
+		return defaultValue
+	}
+	return value
 }
 
 type UserCreds struct {
@@ -113,8 +117,8 @@ func loginUser(c *gin.Context) {
 func createUser(c *gin.Context) {
 	var u authdb.User
 	c.BindJSON(&u)
-	db,err := authdb.Connect(dbUser, dbPassword, dbHost, dbPort)
-	if err != nil{
+	db, err := authdb.Connect(dbUser, dbPassword, dbHost, dbPort)
+	if err != nil {
 		fmt.Println(err.Error())
 	}
 	result, err := authdb.CreateUser(db, u, dbName)
@@ -130,7 +134,7 @@ func createUser(c *gin.Context) {
 	}
 }
 func GenerateJWT(userName string) (string, error) {
-	var mySigningKey = []byte(secretkey)
+	var mySigningKey = []byte(secretKey)
 	token := jwt.New(jwt.SigningMethodHS256)
 	claims := token.Claims.(jwt.MapClaims)
 
