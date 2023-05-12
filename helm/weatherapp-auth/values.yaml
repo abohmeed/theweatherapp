@@ -2,14 +2,13 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-replicaCount: 2
+replicaCount: 1
 
 image:
   repository: afakharany/weatherapp-auth
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
-
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
@@ -80,3 +79,10 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+dbHost: "127.0.0.1"
+mysql:
+  auth:
+    username: authuser
+    password: authpassword
+    database: weatherapp
+    createDatabase: true

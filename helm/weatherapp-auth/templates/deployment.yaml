@@ -28,33 +28,24 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: {{ .Chart.Name }}
-          securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          env:
+      - name: {{ .Chart.Name }}
+        image: afakharany/weatherapp-auth:{{ .Chart.AppVersion }}
+        imagePullPolicy: IfNotPresent
+        ports:
+          - containerPort: {{ .Values.service.port }}
+        env:
           - name: DB_HOST
-            value: {{ .Release.Name }}-mysql
+            value: weatherapp-auth-mysql
+          - name: DB_USER
+            value: {{ .Values.mysql.auth.username }}
           - name: DB_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-mysql
-                key: mysql-root-password
-          ports:
-            - name: http
-              containerPort: 8080
-              protocol: TCP
-          livenessProbe:
-            httpGet:
-              path: /
-              port: http
-          readinessProbe:
-            httpGet:
-              path: /
-              port: http
-          resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            value: {{ .Values.mysql.auth.password }}
+          - name: DB_NAME
+            value: {{ .Values.mysql.auth.database }}
+          - name: DB_PORT
+            value: "3306"
+          - name: SECRET_KEY
+            value: {{ .Values.secretKey }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
