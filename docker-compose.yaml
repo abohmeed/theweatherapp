@@ -1,4 +1,3 @@
-version: "3.9"
 services:
   auth:
     restart: always
@@ -29,7 +28,7 @@ services:
     restart: always
     build: ./weather
     environment:
-      APIKEY: ecbc396f46mshb65cbb1f82cf334p1fcc87jsna5e962a3c542
+      APIKEY: 6d92c50bdamsh81137f3b87ace1fp1d53eejsnfe818b9dbc83
     networks:
       - app-net
   db:
@@ -41,6 +40,7 @@ services:
       - app-net
     volumes:
       - ./db-data:/var/lib/mysql
+      - ./mysql-init:/docker-entrypoint-initdb.d
 
 networks:
   app-net:
